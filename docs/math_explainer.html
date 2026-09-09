@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mathematics & Lean 4 Code Architecture Guide | Navier–Stokes Blowup</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Local KaTeX with CDN fallback -->
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <script defer src="vendor/katex/katex.min.js"></script>
+  <script defer src="vendor/katex/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]});"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (typeof renderMathInElement === 'undefined') {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+        document.head.appendChild(link);
+        const s1 = document.createElement('script');
+        s1.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+        s1.onload = () => {
+          const s2 = document.createElement('script');
+          s2.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+          s2.onload = () => renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]});
+          document.head.appendChild(s2);
+        };
+        document.head.appendChild(s1);
+      }
+    });
+  </script>
+  <style>
+    body { overflow-y: auto; height: auto; padding-bottom: 60px; }
+    .doc-container { max-width: 960px; margin: 40px auto; padding: 0 24px; }
+    .doc-card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 32px; margin-bottom: 28px; }
+    h2 { color: var(--accent-cyan); font-size: 1.5rem; margin-bottom: 16px; border-bottom: 1px solid var(--border-card); padding-bottom: 8px; }
+    h3 { color: #f8fafc; font-size: 1.15rem; margin: 20px 0 10px; }
+    p, li { line-height: 1.7; color: #cbd5e1; font-size: 0.95rem; margin-bottom: 12px; }
+    code { font-family: var(--font-mono); background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; color: var(--accent-cyan); }
+    .code-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.88rem; }
+    .code-table th, .code-table td { border: 1px solid var(--border-card); padding: 10px 14px; text-align: left; }
+    .code-table th { background: rgba(0, 229, 255, 0.08); color: var(--accent-cyan); font-weight: 600; }
+    .lean-tag { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 4px; padding: 2px 6px; font-family: var(--font-mono); font-size: 0.8rem; }
+    .callout { border-left: 4px solid var(--accent-cyan); background: rgba(0, 229, 255, 0.05); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 18px 0; }
+  </style>
+</head>
+<body>
+  <div class="doc-container">
+    <div style="margin-bottom: 24px;">
+      <a href="index.html" class="nav-btn primary-btn">&larr; Back to 3D Simulation Lab</a>
+    </div>
+
+    <div class="doc-card">
+      <h2>1. The Millennium Prize Problem Context</h2>
+      <p>
+        In Charles Fefferman's official Clay Mathematics Institute formulation of the <strong>Navier–Stokes Existence and Smoothness Millennium Problem</strong>, four statements are posed:
+      </p>
+      <ul>
+        <li><strong>(A) Existence and smoothness on $\mathbb{R}^3$ without force:</strong> Unforced smooth initial data gives global smooth solution with bounded energy.</li>
+        <li><strong>(B) Existence and smoothness on $\mathbb{T}^3$ without force:</strong> Periodic unforced counterpart.</li>
+        <li><strong>(C) Breakdown of Navier–Stokes on $\mathbb{R}^3$ with force:</strong> There exist smooth initial data $u_0$ and smooth compactly supported force $f$ for which <em>no</em> global smooth solution with uniformly bounded kinetic energy exists.</li>
+        <li><strong>(D) Breakdown of Navier–Stokes on $\mathbb{T}^3$ with force:</strong> Periodic counterpart of breakdown.</li>
+      </ul>
+      <div class="callout">
+        <strong>The OpenAI Theorem:</strong> Proves alternatives <strong>(C)</strong> and <strong>(D)</strong>! For every viscosity $\nu > 0$, they explicitly construct a smooth, compactly supported force $f$ and a solution $u$ that starts from rest ($u(x,0) = 0$), keeps kinetic energy uniformly bounded $\sup_{t < 1} \|u(t)\|_{L^2} < \infty$, yet blows up at finite time $t = 1$:
+        $$\limsup_{t \uparrow 1} \|u(t)\|_{L^\infty} = \infty$$
+      </div>
+    </div>
+
+    <div class="doc-card">
+      <h2>2. The Anisotropic Self-Similar Vortex Core</h2>
+      <p>
+        Singularity forms at the spatial origin $(0, 0, 0)$ at time $t = 1$. Let $\tau = 1 - t$ be the remaining time before the singularity.
+      </p>
+      <p>The core contracts <em>anisotropically</em> (faster radially than axially):</p>
+      $$ \ell_r \asymp \tau^{1/2}, \quad \ell_z \asymp \tau^{1/2 - h}, \quad \frac{\ell_r}{\ell_z} \asymp \tau^h \to 0 \quad (0 < h < 1/100) $$
+      <p>
+        Because $\ell_r / \ell_z \to 0$, the concentrating region becomes an infinitely thin, needle-like vortex column.
+      </p>
+      <h3>Velocity Scaling & Bounded Energy Paradox</h3>
+      <p>The cylindrical velocity components scale as:</p>
+      $$ |u_\theta^{(0)}|, |u_z^{(0)}| \asymp \tau^{-1/2 - h}, \quad |u_r^{(0)}| = O(\tau^{-1/2}) $$
+      <p>
+        Notice the miraculous volume vs. velocity balance:
+      </p>
+      <ul>
+        <li>Core Volume: $\mathrm{Vol}(C_\tau) \asymp \ell_r^2 \ell_z \asymp \tau \cdot \tau^{1/2 - h} = \tau^{3/2 - h}$.</li>
+        <li>Velocity Squared: $|u|^2 \asymp \tau^{-1 - 2h}$.</li>
+        <li>Core Kinetic Energy:
+          $$E_{\rm core} \asymp \mathrm{Vol} \times |u|^2 \asymp \tau^{3/2 - h} \tau^{-1 - 2h} = \tau^{1/2 - 3h} \xrightarrow[\tau \to 0]{} 0$$
+        </li>
+      </ul>
+      <p>
+        Since $h < 1/100 < 1/6$, $1/2 - 3h > 0$, so the kinetic energy in the concentrating core actually <strong>tends to zero</strong> despite velocities diverging to infinity!
+      </p>
+    </div>
+
+    <div class="doc-card">
+      <h2>3. The Physics: Inward Inflow, Spin-up, and Axial Ejection</h2>
+      <p>
+        Why doesn't fluid accumulate at the axis when $u_r < 0$? Incompressibility $\nabla \cdot u = 0$ requires:
+        $$ \frac{1}{r}\partial_r(r u_r) + \partial_z u_z = 0 $$
+      </p>
+      <p>
+        Radial inflow carries angular momentum $r u_\theta$ inward. Viscosity diffuses it outward. The fluid spirals inward, but rather than stopping at $r=0$, the incoming mass is continuously evacuated by the axial outflow $u_z$, which points upwards for $z > 0$ and downwards for $z < 0$.
+      </p>
+      <p>
+        To break reflection symmetry (which would force $u_z(r, 0, t) = 0$ and kill axial shear at the dividing plane), the construction introduces a small upward offset $j_0 > 0$, separating the layer of weak rotation from the layer of vanishing axial shear.
+      </p>
+    </div>
+
+    <div class="doc-card">
+      <h2>4. Annular Wave Packets & Reynolds Stress Cancellation</h2>
+      <p>
+        If you join this self-similar core onto a smooth exterior heat flow, the momentum residual $\mathcal{R}(u, p) = \partial_t u + (u \cdot \nabla)u - \nu \Delta u + \nabla p$ is nonzero in the intervening annulus $X_a < X < X_b$ and diverges as $t \uparrow 1$.
+      </p>
+      <p>
+        To cancel this singular residual using smooth forcing, the authors inject high-frequency oscillatory wave packets $w$:
+      </p>
+      $$ \mathcal{R}(u_B + w, p_B + \pi) = \mathcal{R}(u_B, p_B) + \mathcal{L}_{u_B}(w, \pi) + \nabla \cdot (w \otimes w) $$
+      <p>
+        The nonlinear Reynolds stress $\langle w \otimes w \rangle$ has two wave families ($\sigma = \pm 1$) that extract kinetic energy from the background shear, grow, and then decay through viscous damping. Their averaged quadratic fluxes match and cancel the singular residual stress!
+      </p>
+    </div>
+
+    <div class="doc-card">
+      <h2>5. Rosetta Stone: Paper Sections ↔ Lean 4 Codebase Map</h2>
+      <table class="code-table">
+        <thead>
+          <tr>
+            <th>Paper Section / Lemma</th>
+            <th>Mathematical Role</th>
+            <th>Lean 4 Source File</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Theorem 1.1</strong></td>
+            <td>Clay Millennium Problem Alternatives C & D</td>
+            <td><span class="lean-tag">NavierStokes/ComparatorSolution.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Theorem 3.1 & 10.1</strong></td>
+            <td>Whole-space localization & smooth compact force</td>
+            <td><span class="lean-tag">NavierStokes/ComparatorR3Theorem.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Lemma 4.1 & (3.2)</strong></td>
+            <td>Similarity variables $q, \eta, X$ & derivatives</td>
+            <td><span class="lean-tag">NavierStokes/SimilarityCoordinates.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Proposition 4.2 & (4.7)</strong></td>
+            <td>Radial flux $V_0$ & incompressibility balance</td>
+            <td><span class="lean-tag">NavierStokes/SimilarityProfile.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Proposition B.2</strong></td>
+            <td>Analytic axis profiles and comparison $f_0(z)$</td>
+            <td><span class="lean-tag">NavierStokes/AxisProfile.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Lemma 4.3 & 4.4</strong></td>
+            <td>Five cumulative radial moment matching $(M, I, J, S, C_p)$</td>
+            <td><span class="lean-tag">NavierStokes/FiveProfileMoments.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Lemma 4.5 & (4.22)</strong></td>
+            <td>Admissible stress cone conditions</td>
+            <td><span class="lean-tag">NavierStokes/ProfileSpectralCone.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Lemma A.6 & (4.29)</strong></td>
+            <td>Exact exterior radial heat flow $\mathcal{H}_{\rm ext}$</td>
+            <td><span class="lean-tag">NavierStokes/RadialHeatProfile.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Proposition 5.5</strong></td>
+            <td>Smooth corrected axisymmetric background $u_B, p_B$</td>
+            <td><span class="lean-tag">NavierStokes/ActualBaseResidual.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Sections 6 & 7</strong></td>
+            <td>Auxiliary torus $\mathbb{T}^2$, wave packets & shear growth</td>
+            <td><span class="lean-tag">NavierStokes/ActualCarrierTransport.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Proposition 7.5 & 7.6</strong></td>
+            <td>Positive covariance representation & signed stress corrections</td>
+            <td><span class="lean-tag">NavierStokes/ActualSignedNativeProfiles.lean</span></td>
+          </tr>
+          <tr>
+            <td><strong>Proposition 9.6</strong></td>
+            <td>4-step correction cycle (Nash-Moser style residual decay)</td>
+            <td><span class="lean-tag">NavierStokes/ActualCycleAssembly.lean</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

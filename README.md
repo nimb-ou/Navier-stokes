@@ -40,3 +40,27 @@ lake build
 
 For instructions on checking the formalizations with Comparator, see the
 [ComparatorChallenges README](ComparatorChallenges/README.md).
+
+## Interactive 3D Simulation & Analysis Laboratory
+
+This repository also includes an interactive 3D simulation and scientific modeling suite to visualize and experiment with the finite-time blowup mechanism on your computer:
+
+```sh
+# 1. Launch the Interactive 3D Laboratory in your browser:
+python3 scripts/run_lab.py
+
+# Or directly open the local WebGL application:
+open web/index.html
+
+# 2. Run scaling benchmarks (velocity blowup, bounded energy, Reynolds numbers):
+python3 -m simulation.run_cli benchmark
+
+# 3. Generate diagnostic figures (matching figures in the paper):
+python3 -m simulation.run_cli plot --output static_plots
+
+# 4. Run the automated unit test suite:
+python3 -m unittest simulation/test_simulation.py
+
+# 5. Read the comprehensive paper-to-Lean code mapping guide:
+# See docs/PROOF_AND_CODE_GUIDE.md or open web/math_explainer.html in browser
+```
